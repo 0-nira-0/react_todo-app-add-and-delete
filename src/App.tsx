@@ -1,26 +1,141 @@
-/* eslint-disable max-len */
+/* eslint-disable @typescript-eslint/indent */
+/* eslint-disable jsx-a11y/label-has-associated-control */
 /* eslint-disable jsx-a11y/control-has-associated-label */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { UserWarning } from './UserWarning';
-
-const USER_ID = 0;
+import { getTodos, USER_ID } from './api/todos';
+import { Todo, TodoErrorMessages, TodosFilterStatus } from './types/Todo';
+import { TodoList } from './components/TodoList/TodoList';
+import { TodoHeader } from './components/TodoHeader/TodoHeader';
+import { TodoFooter } from './components/TodoFooter/TodoFooter';
+import { TodoError } from './components/TodoError/TodoError';
 
 export const App: React.FC = () => {
+  const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [errorMessage, setErrorMessage] = useState<TodoErrorMessages>('');
+  const [todosFilterStatus, setFilterTodosStatus] =
+    useState<TodosFilterStatus>('All');
+  const [todoTitle, setTodoTitle] = useState('');
+  const [updatedTodoTitle, setUpdatedTodoTitle] = useState('');
+  const remainedTodos = todos.filter(todo => !todo.completed).length;
+
+  async function getTodosFromServer() {
+    setIsLoading(true);
+
+    try {
+      const todosFromServer = await getTodos();
+
+      setTodos(todosFromServer);
+    } catch {
+      setErrorMessage('Unable to load todos');
+      await new Promise(() => setTimeout(() => setErrorMessage(''), 3000));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function deleteSelectedTodo(currentTodos: Todo[], todoToDelete: Todo) {
+    const newTodos = [...currentTodos];
+    const indexTodoToDelete = newTodos.findIndex(todo => todo === todoToDelete);
+
+    newTodos.splice(indexTodoToDelete, 1);
+
+    return newTodos;
+  }
+
+  useEffect(() => {
+    getTodosFromServer();
+  }, []);
+
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+
+    setTodos(currentTodos => {
+      const maxId = Math.max(0, ...currentTodos.map(todo => todo.id));
+
+      return [
+        ...currentTodos,
+        {
+          title: todoTitle,
+          completed: false,
+          userId: USER_ID,
+          id: maxId + 1,
+        },
+      ];
+    });
+    setTodoTitle('');
+  }
+
+  function toggleTodo(todo: Todo) {
+    const index = todos.findIndex(currentTodo => currentTodo === todo);
+
+    return setTodos(currentTodos => {
+      const newTodos = [...currentTodos];
+
+      newTodos[index].completed = !newTodos[index].completed;
+
+      return newTodos;
+    });
+  }
+
+  const visibleTodos = todos.filter(todo => {
+    switch (todosFilterStatus) {
+      case 'All':
+        return true;
+      case 'Completed':
+        return todo.completed;
+      case 'Active':
+        return !todo.completed;
+      default:
+        return true;
+    }
+  });
+
+  function isAllTodosComplete() {
+    return visibleTodos ? visibleTodos.every(todo => todo.completed) : false;
+  }
+
   if (!USER_ID) {
     return <UserWarning />;
   }
 
   return (
-    <section className="section container">
-      <p className="title is-4">
-        Copy all you need from the prev task:
-        <br />
-        <a href="https://github.com/mate-academy/react_todo-app-loading-todos#react-todo-app-load-todos">
-          React Todo App - Load Todos
-        </a>
-      </p>
+    <div className="todoapp">
+      <h1 className="todoapp__title">todos</h1>
 
-      <p className="subtitle">Styles are already copied</p>
-    </section>
+      <div className="todoapp__content">
+        <TodoHeader
+          handleSubmit={handleSubmit}
+          isAllTodosComplete={isAllTodosComplete}
+          setTodoTitle={setTodoTitle}
+          todoTitle={todoTitle}
+        />
+
+        <TodoList
+          deleteSelectedTodo={deleteSelectedTodo}
+          isLoading={isLoading}
+          setTodoTitle={setTodoTitle}
+          selectedTodo={selectedTodo}
+          setSelectedTodo={setSelectedTodo}
+          setTodos={setTodos}
+          setUpdatedTodoTitle={setUpdatedTodoTitle}
+          updatedTodoTitle={updatedTodoTitle}
+          todos={visibleTodos}
+          toggleTodo={toggleTodo}
+        />
+
+        {todos.length !== 0 && (
+          <TodoFooter
+            isAllTodosComplete={isAllTodosComplete}
+            remainedTodos={remainedTodos}
+            setFilterTodosStatus={setFilterTodosStatus}
+            todosFilterStatus={todosFilterStatus}
+          />
+        )}
+      </div>
+      <TodoError errorMessage={errorMessage} />
+    </div>
   );
 };
