@@ -8,12 +8,13 @@ type Props = {
   todos: Todo[];
   tempTodo: Todo | null;
   onUpdate: (
-    event: React.FormEvent<HTMLFormElement>,
     todoId: Todo['id'],
     newTitle: string,
+    setSelectedTodo: React.Dispatch<React.SetStateAction<Todo | null>>,
+    event?: React.FormEvent<HTMLFormElement>,
   ) => Promise<void>;
   onDelete: (todoId: Todo['id']) => void;
-  onToggle: (todoId: Todo['id']) => void;
+  onToggle: (todoId: Todo['id'], status: boolean) => void;
   loadingTodoIds: Todo['id'][];
 };
 

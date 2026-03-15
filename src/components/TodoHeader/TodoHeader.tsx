@@ -9,12 +9,16 @@ type Props = {
     setTodoTitle: React.Dispatch<React.SetStateAction<string>>,
   ) => Promise<void>;
   newTodoField: React.RefObject<HTMLInputElement>;
+  isTodosExists: () => boolean;
+  onToggles: () => void;
 };
 
 export const TodoHeader: React.FC<Props> = ({
   isAllTodosComplete,
   onAdd,
   newTodoField,
+  isTodosExists,
+  onToggles,
 }) => {
   const [todoTitle, setTodoTitle] = useState('');
   const [isAddingTodo, setIsAddingTodo] = useState(false);
@@ -27,13 +31,16 @@ export const TodoHeader: React.FC<Props> = ({
 
   return (
     <header className="todoapp__header">
-      <button
-        type="button"
-        className={classNames('todoapp__toggle-all', {
-          active: isAllTodosComplete(),
-        })}
-        data-cy="ToggleAllButton"
-      />
+      {isTodosExists() && (
+        <button
+          type="button"
+          className={classNames('todoapp__toggle-all', {
+            active: isAllTodosComplete(),
+          })}
+          onClick={onToggles}
+          data-cy="ToggleAllButton"
+        />
+      )}
 
       <form
         onSubmit={async event => {

@@ -92,7 +92,7 @@ export const App: React.FC = () => {
     } catch (error) {
       setTodoTitle(todoTitle);
       setErrorMessage('Unable to add a todo');
-      hideErrorMessageAfterTimeout(3000);
+      hideErrorMessageAfterTimeout(HIDE_ERROR_TIMEOUT);
     } finally {
       setTempTodo(null);
     }
@@ -114,60 +114,36 @@ export const App: React.FC = () => {
   }
 
   async function deleteCompletedTodos() {
-    await Promise.allSettled(
-      todos.map(todo => {
-        if (todo.completed) {
-          handleTodoDelete(todo.id);
-        }
-      }),
+    const completedTodoIds = todos
+      .filter(todo => todo.completed)
+      .map(todo => todo.id);
+
+    setLoadingTodoIds(prevIds => [...prevIds, ...completedTodoIds]);
+
+    const deleteRequests = await Promise.allSettled(
+      completedTodoIds.map(id => deleteTodo(id).then(() => id)),
     );
-  }
 
-  async function handleTodoTitleUpdate(
-    event: React.FormEvent<HTMLFormElement>,
-    todoId: Todo['id'],
-    newTitle: string,
-  ) {
-    event.preventDefault();
+    const deletedTodoIds = deleteRequests
+      .filter(
+        (request): request is PromiseFulfilledResult<number> =>
+          request.status === 'fulfilled',
+      )
+      .map(request => request.value);
 
-    if (newTitle === '') {
-      await handleTodoDelete(todoId);
+    if (deleteRequests.some(request => request.status === 'rejected')) {
+      setErrorMessage('Unable to delete a todo');
+      hideErrorMessageAfterTimeout(HIDE_ERROR_TIMEOUT);
     }
 
     setTodos(prevTodos => {
-      return prevTodos.map(prevTodo => {
-        if (prevTodo.id === todoId) {
-          return { ...prevTodo, title: newTitle.trim() };
-        }
-
-        return prevTodo;
-      });
+      return prevTodos.filter(todo => !deletedTodoIds.includes(todo.id));
     });
 
-    setLoadingTodoIds(prevIds => [...prevIds, todoId]);
-    try {
-      await updateTodo(todoId, { title: newTitle.trim() });
-    } catch {
-      setErrorMessage('Unable to update a todo');
-      hideErrorMessageAfterTimeout(HIDE_ERROR_TIMEOUT);
-    } finally {
-      setLoadingTodoIds(prevIds => prevIds.filter(id => id !== todoId));
-    }
-  }
-
-  function handleTodoToggle(todoId: Todo['id']) {
-    setTodos(currentTodos => {
-      return currentTodos.map(todo => {
-        if (todo.id === todoId) {
-          return {
-            ...todo,
-            completed: !todo.completed,
-          };
-        }
-
-        return todo;
-      });
-    });
+    setLoadingTodoIds(prevIds =>
+      prevIds.filter(id => !completedTodoIds.includes(id)),
+    );
+    newTodoField.current?.focus();
   }
 
   const visibleTodos = todos.filter(todo => {
@@ -189,6 +165,151 @@ export const App: React.FC = () => {
       : false;
   }
 
+  async function handleTodoTitleUpdate(
+    todoId: Todo['id'],
+    newTitle: string,
+    setSelectedTodo: React.Dispatch<React.SetStateAction<Todo | null>>,
+    event?: React.FormEvent<HTMLFormElement>,
+  ) {
+    event?.preventDefault();
+
+    if (newTitle === '') {
+      await handleTodoDelete(todoId);
+    }
+
+    if (newTitle === todos.find(todo => todo.id === todoId)?.title) {
+      setSelectedTodo(null);
+
+      return;
+    }
+
+    setTodos(prevTodos => {
+      return prevTodos.map(prevTodo => {
+        if (prevTodo.id === todoId) {
+          return { ...prevTodo, title: newTitle.trim() };
+        }
+
+        return prevTodo;
+      });
+    });
+
+    setLoadingTodoIds(prevIds => [...prevIds, todoId]);
+    try {
+      await updateTodo(todoId, { title: newTitle.trim() });
+      setSelectedTodo(null);
+    } catch {
+      setSelectedTodo(todos.find(todo => todo.id) ?? null);
+      setErrorMessage('Unable to update a todo');
+      hideErrorMessageAfterTimeout(HIDE_ERROR_TIMEOUT);
+    } finally {
+      setLoadingTodoIds(prevIds => prevIds.filter(id => id !== todoId));
+    }
+  }
+
+  async function handleTodoToggle(todoId: Todo['id'], status: boolean) {
+    setLoadingTodoIds(prevIds => [...prevIds, todoId]);
+    try {
+      await updateTodo(todoId, { completed: status });
+      setTodos(currentTodos => {
+        return currentTodos.map(todo => {
+          if (todo.id === todoId) {
+            return {
+              ...todo,
+              completed: !todo.completed,
+            };
+          }
+
+          return todo;
+        });
+      });
+    } catch {
+      setErrorMessage('Unable to update a todo');
+      hideErrorMessageAfterTimeout(HIDE_ERROR_TIMEOUT);
+    } finally {
+      setLoadingTodoIds(prevIds => prevIds.filter(id => id !== todoId));
+    }
+  }
+
+  async function handleTodoToggles() {
+    if (isAllTodosComplete()) {
+      setLoadingTodoIds([...todos.map(todo => todo.id)]);
+
+      const updateRequests = await Promise.allSettled(
+        todos.map(todo =>
+          updateTodo(todo.id, { completed: false }).then(() => todo.id),
+        ),
+      );
+
+      const updatedTodoIds = updateRequests
+        .filter(
+          (request): request is PromiseFulfilledResult<number> =>
+            request.status === 'fulfilled',
+        )
+        .map(request => request.value);
+
+      setTodos(prevTodos => {
+        return prevTodos.map(todo => {
+          if (updatedTodoIds.includes(todo.id)) {
+            return { ...todo, completed: !todo.completed };
+          }
+
+          return todo;
+        });
+      });
+
+      if (updateRequests.some(request => request.status === 'rejected')) {
+        setErrorMessage('Unable to update a todo');
+        hideErrorMessageAfterTimeout(HIDE_ERROR_TIMEOUT);
+      }
+
+      setLoadingTodoIds([]);
+
+      return;
+    }
+
+    const notCompletedTodoIds = todos
+      .filter(todo => !todo.completed)
+      .map(todo => todo.id);
+
+    setLoadingTodoIds(prevIds => [...prevIds, ...notCompletedTodoIds]);
+
+    const updateRequests = await Promise.allSettled(
+      notCompletedTodoIds.map(id =>
+        updateTodo(id, { completed: true }).then(() => id),
+      ),
+    );
+
+    const updatedTodoIds = updateRequests
+      .filter(
+        (request): request is PromiseFulfilledResult<number> =>
+          request.status === 'fulfilled',
+      )
+      .map(request => request.value);
+
+    setTodos(prevTodos => {
+      return prevTodos.map(todo => {
+        if (updatedTodoIds.includes(todo.id)) {
+          return { ...todo, completed: !todo.completed };
+        }
+
+        return todo;
+      });
+    });
+
+    if (updateRequests.some(request => request.status === 'rejected')) {
+      setErrorMessage('Unable to update a todo');
+      hideErrorMessageAfterTimeout(HIDE_ERROR_TIMEOUT);
+    }
+
+    setLoadingTodoIds(prevIds =>
+      prevIds.filter(id => !notCompletedTodoIds.includes(id)),
+    );
+  }
+
+  function isTodosExists() {
+    return todos.length !== 0;
+  }
+
   function isSomeTodosCompleted() {
     return visibleTodos ? visibleTodos.some(todo => todo.completed) : false;
   }
@@ -203,9 +324,11 @@ export const App: React.FC = () => {
 
       <div className="todoapp__content">
         <TodoHeader
+          onToggles={handleTodoToggles}
           onAdd={handleTodoSubmit}
           isAllTodosComplete={isAllTodosComplete}
           newTodoField={newTodoField}
+          isTodosExists={isTodosExists}
         />
 
         <TodoList

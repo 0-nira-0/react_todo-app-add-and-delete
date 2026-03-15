@@ -4,11 +4,12 @@ import { useState } from 'react';
 
 type Props = {
   todo: Todo;
-  onToggle?: (todoId: Todo['id']) => void;
+  onToggle?: (todoId: Todo['id'], status: boolean) => void;
   onUpdate?: (
-    event: React.FormEvent<HTMLFormElement>,
     todoId: Todo['id'],
     newTitle: string,
+    setSelectedTodo: React.Dispatch<React.SetStateAction<Todo | null>>,
+    event?: React.FormEvent<HTMLFormElement>,
   ) => Promise<void>;
   onDelete?: (todoId: Todo['id']) => void;
   loadingTodoIds: Todo['id'][];
@@ -37,15 +38,14 @@ export const TodoItem: React.FC<Props> = ({
           type="checkbox"
           className="todo__status"
           checked={todo.completed}
-          onClick={() => onToggle(todo.id)}
+          onClick={() => onToggle(todo.id, !todo.completed)}
         />
       </label>
 
       {todo.id === selectedTodo?.id ? (
         <form
           onSubmit={async event => {
-            await onUpdate(event, todo.id, updatedTodoTitle);
-            setSelectedTodo(null);
+            await onUpdate(todo.id, updatedTodoTitle, setSelectedTodo, event);
           }}
         >
           <input
@@ -54,7 +54,14 @@ export const TodoItem: React.FC<Props> = ({
             autoFocus={selectedTodo.id === todo.id}
             className="todo__title-field"
             placeholder="Empty todo will be deleted"
-            onBlur={() => setSelectedTodo(null)}
+            onBlur={async () => {
+              await onUpdate(todo.id, updatedTodoTitle, setSelectedTodo);
+            }}
+            onKeyUp={event => {
+              if (event.key === 'Escape') {
+                setSelectedTodo(null);
+              }
+            }}
             onChange={event => setUpdatedTodoTitle(event.target.value)}
             value={updatedTodoTitle}
           />
