@@ -7,4 +7,17 @@ export const getTodos = async () => {
   return client.get<Todo[]>(`/todos?userId=${USER_ID}`);
 };
 
-// Add more methods here
+export const addTodo = async (todo: Omit<Todo, 'id'>) => {
+  return client.post<Todo>('/todos', todo);
+};
+
+export const updateTodo = async (
+  todoId: Todo['id'],
+  data: Partial<Omit<Todo, 'id'>>,
+) => {
+  return client.patch(`/todos/${todoId}`, data);
+};
+
+export const deleteTodo = async (todoId: Todo['id']) => {
+  return client.delete(`/todos/${todoId}`);
+};
